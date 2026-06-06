@@ -4,12 +4,23 @@ on:
   pull_request:
     branches: ["main"]
   push:
-    branches: ["main"]
+    branches: ["feat_nofire", "main"]
   workflow_dispatch: # build on demand
+    inputs:
+      force:
+        description: 'Force the build even if no relevant files changed'
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: write # for uploading the SBOM to the release
+  packages: write # for uploading the finished container
+  security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+  id-token: write # to complete the identity challenge with sigstore/fulcio when running outside of PRs
 
 jobs:
   get-changed-files:
@@ -54,10 +65,9 @@ jobs:
   build-bunny:
     needs: [get-changed-files]
     name: Bunny
-    if: ${{ needs.get-changed-files.outputs.go == 'true' || needs.get-changed-files.outputs.dockerfile == 'true' || needs.get-changed-files.outputs.version == 'true' }}
+    if: ${{ inputs.force == true || needs.get-changed-files.outputs.go == 'true' || needs.get-changed-files.outputs.dockerfile == 'true' || needs.get-changed-files.outputs.version == 'true' }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
-      runner: '["base", "dind", "2204"]'
       runner-archs: '["amd64", "arm64"]'
       version-tag: ${{ needs.get-changed-files.outputs.version == 'true' }}
