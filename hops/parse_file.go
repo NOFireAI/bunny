@@ -191,7 +191,7 @@ func containerfileToPack(state *llb.State, img *dockerspec.DockerOCIImage) (*Pac
 		instr.Img.Config.Entrypoint = append([]string{"/urunit"}, img.Config.ImageConfig.Entrypoint...)
 	}
 	if instr.Annots["com.urunc.unikernel.hypervisor"] == "" {
-		instr.Annots["com.urunc.unikernel.hypervisor"] = "qemu"
+		instr.Annots["com.urunc.unikernel.hypervisor"] = "cloud-hypervisor"
 	}
 	if instr.Annots["com.urunc.unikernel.mountRootfs"] == "" &&
 		instr.Annots["com.urunc.unikernel.initrd"] == "" &&
