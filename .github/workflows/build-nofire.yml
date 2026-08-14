@@ -1,0 +1,164 @@
+name: 🍜 Build/publish bunny (ghcr)
+
+on:
+  workflow_call:
+    inputs:
+      runner-archs:
+        type: string
+        default: '["amd64", "arm64"]'
+      registry:
+        type: string
+        default: 'ghcr.io'
+      version-tag:
+        type: boolean
+        default: false
+
+jobs:
+  build-all:
+    runs-on: ${{ matrix.runner }}
+    #timeout-minutes: 600
+    permissions:
+      contents: read   # for actions/checkout
+      packages: write  # push images to ghcr.io
+      id-token: write  # cosign keyless signing (sigstore/fulcio OIDC)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    env:
+      REGISTRY: ${{ inputs.registry }}
+      ARCH: ${{ matrix.arch }}
+
+    steps:
+      - name: Checkout the repo
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set short SHA
+        run: echo "SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Compute lowercase image name
+        run: echo "IMAGE_NAME=${REGISTRY,,}/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ env.ARCH }}-${{ env.SHA_SHORT }}
+
+      - name: Build and push ${{ matrix.arch }}
+        id: build-and-push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+          file: Dockerfile
+          provenance: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+      - name: Sign the published Docker image
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        run: |
+          cosign sign --new-bundle-format=false --use-signing-config=false --yes ${{ env.IMAGE_NAME }}@$DIGEST \
+          -a "repo=${{ github.repository }}" \
+          -a "workflow=${{ github.workflow }}" \
+          -a "ref=${{ github.sha }}" \
+          -a "author=NOFire AI"
+
+  manifest:
+    needs: [build-all]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # for actions/checkout
+      packages: write  # push the manifest to ghcr.io
+      id-token: write  # cosign keyless signing (sigstore/fulcio OIDC)
+    env:
+      REGISTRY: ${{ inputs.registry }}
+
+    steps:
+      - name: Checkout the repo
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set short SHA
+        run: echo "SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Compute lowercase image name
+        run: echo "IMAGE_NAME=${REGISTRY,,}/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set Docker tag based on branch or version
+        id: tag
+        run: |
+          if [[ ${{ inputs.version-tag }} == true ]]; then
+            echo "Version change detected. Using version: $( cat VERSION )."
+            echo "TAG=$(cat VERSION)" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF##*/}" == "nofire" ]]; then
+            echo "Change in nofire branch detected. Using latest tag."
+            echo "TAG=latest" >> $GITHUB_ENV
+          else
+            echo "Using tag: ${SHA_SHORT}."
+            echo "TAG=${SHA_SHORT}" >> $GITHUB_ENV
+          fi
+
+      - name: Process runner architectures and create docker manifest
+        id: create-manifest
+        run: |
+          runner_archs='${{ inputs.runner-archs }}'  # Using the input string array
+          amend_command=""
+
+          # Loop over the architectures and build the amend command
+          for arch in $(echo $runner_archs | jq -r '.[]'); do
+            amend_command+=" --amend ${{ env.IMAGE_NAME }}:$arch-${{ env.SHA_SHORT }}"
+          done
+
+          echo "-------------------- Amend command constructed -------------------"
+          echo "$amend_command"
+
+          # Create the docker manifest with the amend command
+          docker manifest create ${{ env.IMAGE_NAME }}:${{ env.TAG }} $amend_command
+
+          # Push the manifest and capture its digest for signing
+          VAR=`docker manifest push ${{ env.IMAGE_NAME }}:${{ env.TAG }} | tail -1`
+          echo "manifest_sha=$VAR" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+      - name: Sign the published Docker image
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          DIGEST: ${{ steps.create-manifest.outputs.manifest_sha }}
+        run: |
+          cosign sign --new-bundle-format=false --use-signing-config=false --yes ${{ env.IMAGE_NAME }}@$DIGEST \
+          -a "repo=${{ github.repository }}" \
+          -a "workflow=${{ github.workflow }}" \
+          -a "ref=${{ github.sha }}" \
+          -a "author=NOFire AI"

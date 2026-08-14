@@ -1,0 +1,71 @@
+name: Trigger build/publish bunny (nofire)
+
+on:
+  pull_request:
+    branches: ["nofire"]
+  push:
+    branches: ["nofire"]
+  workflow_dispatch: # build on demand
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  get-changed-files:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # paths-filter uses the PR API on pull_request events
+    outputs:
+      version_files: ${{ steps.filter.outputs.version_files}}
+      version: ${{ steps.filter.outputs.version }}
+      dockerfile_files: ${{ steps.filter.outputs.dockerfile_files}}
+      dockerfile: ${{ steps.filter.outputs.dockerfile }}
+      go_files: ${{ steps.filter.outputs.go_files}}
+      go: ${{ steps.filter.outputs.go }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Get Changed Files
+        id: filter
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
+        with:
+          list-files: 'json'
+          base: 'nofire'
+          filters: |
+            version:
+              - 'VERSION'
+            dockerfile:
+              - 'Dockerfile'
+            go:
+              - 'cmd/**'
+              - 'hops/**'
+              - 'Makefile'
+              - 'go.mod'
+              - 'go.sum'
+
+      - name: Show Changed Files
+        run: |
+          echo "Files in dockerfile: ${{ steps.filter.outputs.dockerfile_files }}"
+          echo "Files for version: ${{ steps.filter.outputs.version_files }}"
+          echo "Files in go: ${{ steps.filter.outputs.go_files }}"
+          echo "dockerfile: ${{ steps.filter.outputs.dockerfile}}"
+          echo "go: ${{ steps.filter.outputs.go}}"
+          echo "version: ${{ steps.filter.outputs.version}}"
+
+  build-bunny:
+    needs: [get-changed-files]
+    name: Bunny
+    if: ${{ needs.get-changed-files.outputs.go == 'true' || needs.get-changed-files.outputs.dockerfile == 'true' || needs.get-changed-files.outputs.version == 'true' }}
+    permissions:
+      contents: read     # actions/checkout inside build-nofire.yml
+      packages: write    # push images to ghcr.io
+      id-token: write    # cosign keyless signing; read-only default won't grant this to the callee
+    uses: ./.github/workflows/build-nofire.yml
+    secrets: inherit
+    with:
+      runner-archs: '["amd64", "arm64"]'
+      registry: 'ghcr.io'
+      version-tag: ${{ needs.get-changed-files.outputs.version == 'true' }}
