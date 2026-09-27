@@ -22,8 +22,9 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
+// Mirrored and pinned like the defaults in parse_file.go.
 const (
-	defaultBsdcpioImage string = "harbor.nbfc.io/nubificus/bunny/libarchive:latest"
+	defaultBsdcpioImage string = "ghcr.io/nofireai/bunny/libarchive@sha256:5244491f1afc2ee646b5a6b576598902580f64b9c00e61448512fa8723dcde7b"
 )
 
 // Create a LLB State that simply copies all the files in the include list inside

@@ -1,0 +1,61 @@
+name: Mirror guest images (nofire)
+
+# Copies the images bunny injects into every build (urunit, the Cloud
+# Hypervisor kernel, libarchive) from harbor.nbfc.io into ghcr.io/nofireai, by
+# digest. hops/parse_file.go and hops/llb.go reference the copies, so a build
+# no longer depends on harbor.nbfc.io being up or on what its `latest` points
+# at today.
+#
+# skopeo --preserve-digests keeps each copy byte-identical to its source, so
+# the digest pinned in the Go code is the upstream digest. Changing one means
+# editing it both here and there in the same PR.
+#
+# Runs on push to nofire when this file changes, and on demand. The mirror has
+# to exist before a frontend built from the new defaults is used; both run on
+# the same push, and the frontend build takes longer.
+
+on:
+  push:
+    branches: ["nofire"]
+    paths: [".github/workflows/mirror-nofire.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write # create/update ghcr.io/nofireai/* packages
+
+jobs:
+  mirror:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - src: harbor.nbfc.io/nubificus/urunit
+            dst: ghcr.io/nofireai/urunit
+            digest: sha256:ae7553fcf81489da20c34e8ec57f64f549a6db8aa9c48636e343c271d6a7b2d2
+          - src: harbor.nbfc.io/nubificus/bunny/linux-kernel-cloud-hypervisor
+            dst: ghcr.io/nofireai/bunny/linux-kernel-cloud-hypervisor
+            digest: sha256:a9638a1ddb2e780247ce49cc5f6175b032a9ddd7b533f53e1bc5e7d31016c930
+          - src: harbor.nbfc.io/nubificus/bunny/libarchive
+            dst: ghcr.io/nofireai/bunny/libarchive
+            digest: sha256:5244491f1afc2ee646b5a6b576598902580f64b9c00e61448512fa8723dcde7b
+    steps:
+      - name: Copy ${{ matrix.src }}@${{ matrix.digest }}
+        env:
+          SRC: ${{ matrix.src }}
+          DST: ${{ matrix.dst }}
+          DIGEST: ${{ matrix.digest }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Tagged with the digest's first 12 hex characters so the package
+          # page shows which upstream build it holds; the Go code pulls by
+          # digest and never reads the tag.
+          tag="sha-${DIGEST#sha256:}"; tag="${tag:0:16}"
+          skopeo copy --all --preserve-digests \
+            --dest-creds "${GHCR_USER}:${GHCR_TOKEN}" \
+            "docker://${SRC}@${DIGEST}" "docker://${DST}:${tag}"
+          # Fail loudly if the copy is not byte-identical.
+          got="$(skopeo inspect --raw --creds "${GHCR_USER}:${GHCR_TOKEN}" "docker://${DST}:${tag}" | sha256sum | cut -d' ' -f1)"
+          test "sha256:${got}" = "${DIGEST}" || { echo "::error::${DST}:${tag} is sha256:${got}, expected ${DIGEST}"; exit 1; }
