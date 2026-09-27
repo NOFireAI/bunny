@@ -27,12 +27,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// urunit and the Cloud Hypervisor kernel are the two artifacts every
+// Containerfile build injects, so they come from our own registry, pinned by
+// digest: an upstream `latest` could change the guest kernel under a build
+// without anyone noticing, and a harbor.nbfc.io outage (it served a certificate
+// for the wrong name on 2026-08-26) would fail every build. The copies are
+// made by .github/workflows/mirror-nofire.yml with digests preserved, so each
+// digest here is the upstream one. To move to a newer upstream build, bump the
+// digest there and here together.
 const (
-	defaultUrunitImage            string = "harbor.nbfc.io/nubificus/urunit:latest"
+	defaultUrunitImage            string = "ghcr.io/nofireai/urunit@sha256:ae7553fcf81489da20c34e8ec57f64f549a6db8aa9c48636e343c271d6a7b2d2"
 	defaultUrunitPath             string = "/urunit"
 	defaultQemuKernelImage        string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-qemu:latest"
 	defaultFirecrackerKernelImage string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-firecracker:latest"
-	defaultCLHKernelImage         string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-cloud-hypervisor:latest"
+	defaultCLHKernelImage         string = "ghcr.io/nofireai/bunny/linux-kernel-cloud-hypervisor@sha256:a9638a1ddb2e780247ce49cc5f6175b032a9ddd7b533f53e1bc5e7d31016c930"
 )
 
 var (
