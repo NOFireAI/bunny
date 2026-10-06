@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	defaultUrunitImage            string = "harbor.nbfc.io/nubificus/urunit:latest"
+	defaultUrunitImage            string = "ghcr.io/nofireai/urunit:latest"
 	defaultUrunitPath             string = "/urunit"
 	defaultQemuKernelImage        string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-qemu:latest"
 	defaultFirecrackerKernelImage string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-firecracker:latest"
