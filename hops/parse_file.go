@@ -40,7 +40,7 @@ const (
 	defaultUrunitPath             string = "/urunit"
 	defaultQemuKernelImage        string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-qemu:latest"
 	defaultFirecrackerKernelImage string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-firecracker:latest"
-	defaultCLHKernelImage         string = "ghcr.io/nofireai/bunny/linux-kernel-cloud-hypervisor@sha256:a9638a1ddb2e780247ce49cc5f6175b032a9ddd7b533f53e1bc5e7d31016c930"
+	defaultCLHKernelImage         string = "ghcr.io/nofireai/bunny/linux-kernel-cloud-hypervisor@sha256:20a3b24d56a00838a4c4522c97ad127fb74ebd3f9ae12444cbc78b11f73f8272"
 )
 
 var (
