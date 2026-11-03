@@ -27,14 +27,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// urunit and the Cloud Hypervisor kernel are the two artifacts every
-// Containerfile build injects, so they come from our own registry, pinned by
-// digest: a `latest` could change the guest kernel under a build without anyone
-// noticing, and a harbor.nbfc.io outage (it served a certificate for the wrong
-// name on 2026-08-26) would fail every build. urunit is our own build; the
-// kernel is a copy made by .github/workflows/mirror-nofire.yml with digests
-// preserved, so its digest here is the upstream one. Bump it there and here
-// together.
+// urunit and, on the default cloud-hypervisor path, the guest kernel come from
+// ghcr.io/nofireai pinned by digest, so an upstream `latest` cannot change the
+// guest kernel silently and a harbor.nbfc.io outage cannot fail those builds.
+// urunit is our own build; the kernel (and libarchive, llb.go) are copies made
+// by .github/workflows/mirror-nofire.yml with digests preserved. The qemu and
+// firecracker kernels still come from harbor, unpinned.
 const (
 	defaultUrunitImage            string = "ghcr.io/nofireai/urunit@sha256:239ab9c911a492845a7a6f4be9fe541d62c5ce7738b4230339269ef0caad2230"
 	defaultUrunitPath             string = "/urunit"

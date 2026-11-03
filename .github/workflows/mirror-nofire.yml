@@ -8,7 +8,8 @@ name: Mirror guest images (nofire)
 #
 # skopeo --preserve-digests keeps each copy byte-identical to its source, so
 # the digest pinned in the Go code is the upstream digest. Changing one means
-# editing it both here and there in the same PR.
+# editing it both here and there in the same PR; check-pins fails a PR that
+# doesn't.
 #
 # Runs on push to nofire when this file changes, and on demand. The mirror has
 # to exist before a frontend built from the new defaults is used; both run on
@@ -18,6 +19,8 @@ on:
   push:
     branches: ["nofire"]
     paths: [".github/workflows/mirror-nofire.yml"]
+  pull_request:
+    branches: ["nofire"]
   workflow_dispatch:
 
 permissions:
@@ -25,7 +28,23 @@ permissions:
   packages: write # create/update ghcr.io/nofireai/* packages
 
 jobs:
+  check-pins:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Every mirrored digest is pinned in hops/
+        run: |
+          rc=0
+          for d in $(grep -oE 'digest: sha256:[0-9a-f]{64}' .github/workflows/mirror-nofire.yml | cut -d' ' -f2); do
+            grep -rqF "@${d}" hops/ || { echo "::error::${d} is mirrored but not pinned in hops/"; rc=1; }
+          done
+          for ref in $(grep -rhoE 'ghcr\.io/nofireai/bunny/[a-z0-9-]+@sha256:[0-9a-f]{64}' hops/); do
+            grep -qF "${ref#*@}" .github/workflows/mirror-nofire.yml || { echo "::error::${ref} is pinned but not mirrored"; rc=1; }
+          done
+          exit $rc
+
   mirror:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
