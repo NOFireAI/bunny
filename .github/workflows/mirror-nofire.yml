@@ -1,0 +1,79 @@
+name: Mirror guest images (nofire)
+
+# Copies the upstream images bunny injects into builds (the Cloud Hypervisor
+# kernel, libarchive) into ghcr.io/nofireai, by digest. urunit is not mirrored:
+# ghcr.io/nofireai/urunit is our own build. hops/parse_file.go and hops/llb.go
+# reference the copies, so a build no longer depends on an upstream registry
+# being up or on what its `latest` points at today.
+#
+# skopeo --preserve-digests keeps each copy byte-identical to its source, so
+# the digest pinned in the Go code is the upstream digest. Changing one means
+# editing it both here and there in the same PR; check-pins fails a PR that
+# doesn't.
+#
+# Runs on push to nofire when this file changes, and on demand. The mirror has
+# to exist before a frontend built from the new defaults is used; both run on
+# the same push, and the frontend build takes longer.
+
+on:
+  push:
+    branches: ["nofire"]
+    paths: [".github/workflows/mirror-nofire.yml"]
+  pull_request:
+    branches: ["nofire"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write # create/update ghcr.io/nofireai/* packages
+
+jobs:
+  check-pins:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Every mirrored digest is pinned in hops/
+        run: |
+          rc=0
+          for d in $(grep -oE 'digest: sha256:[0-9a-f]{64}' .github/workflows/mirror-nofire.yml | cut -d' ' -f2); do
+            grep -rqF "@${d}" hops/ || { echo "::error::${d} is mirrored but not pinned in hops/"; rc=1; }
+          done
+          for ref in $(grep -rhoE 'ghcr\.io/nofireai/bunny/[a-z0-9-]+@sha256:[0-9a-f]{64}' hops/); do
+            grep -qF "${ref#*@}" .github/workflows/mirror-nofire.yml || { echo "::error::${ref} is pinned but not mirrored"; rc=1; }
+          done
+          exit $rc
+
+  mirror:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # urunc-dev/unikernel-build's generic kernel, Linux 6.18.57: built
+          # from the signed kernel.org tarball, amd64 and arm64.
+          - src: ghcr.io/urunc-dev/unikernel-build/linux-kernel
+            dst: ghcr.io/nofireai/bunny/linux-kernel-cloud-hypervisor
+            digest: sha256:20a3b24d56a00838a4c4522c97ad127fb74ebd3f9ae12444cbc78b11f73f8272
+          - src: harbor.nbfc.io/nubificus/bunny/libarchive
+            dst: ghcr.io/nofireai/bunny/libarchive
+            digest: sha256:5244491f1afc2ee646b5a6b576598902580f64b9c00e61448512fa8723dcde7b
+    steps:
+      - name: Copy ${{ matrix.src }}@${{ matrix.digest }}
+        env:
+          SRC: ${{ matrix.src }}
+          DST: ${{ matrix.dst }}
+          DIGEST: ${{ matrix.digest }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Tagged with the digest's first 12 hex characters so the package
+          # page shows which upstream build it holds; the Go code pulls by
+          # digest and never reads the tag.
+          tag="sha-${DIGEST#sha256:}"; tag="${tag:0:16}"
+          skopeo copy --all --preserve-digests \
+            --dest-creds "${GHCR_USER}:${GHCR_TOKEN}" \
+            "docker://${SRC}@${DIGEST}" "docker://${DST}:${tag}"
+          # Fail loudly if the copy is not byte-identical.
+          got="$(skopeo inspect --raw --creds "${GHCR_USER}:${GHCR_TOKEN}" "docker://${DST}:${tag}" | sha256sum | cut -d' ' -f1)"
+          test "sha256:${got}" = "${DIGEST}" || { echo "::error::${DST}:${tag} is sha256:${got}, expected ${DIGEST}"; exit 1; }

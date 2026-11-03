@@ -27,12 +27,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// urunit and, on the default cloud-hypervisor path, the guest kernel come from
+// ghcr.io/nofireai pinned by digest, so an upstream `latest` cannot change the
+// guest kernel silently and a harbor.nbfc.io outage cannot fail those builds.
+// urunit is our own build; the kernel (and libarchive, llb.go) are copies made
+// by .github/workflows/mirror-nofire.yml with digests preserved. The qemu and
+// firecracker kernels still come from harbor, unpinned.
 const (
-	defaultUrunitImage            string = "ghcr.io/nofireai/urunit:latest"
+	defaultUrunitImage            string = "ghcr.io/nofireai/urunit@sha256:239ab9c911a492845a7a6f4be9fe541d62c5ce7738b4230339269ef0caad2230"
 	defaultUrunitPath             string = "/urunit"
 	defaultQemuKernelImage        string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-qemu:latest"
 	defaultFirecrackerKernelImage string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-firecracker:latest"
-	defaultCLHKernelImage         string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-cloud-hypervisor:latest"
+	defaultCLHKernelImage         string = "ghcr.io/nofireai/bunny/linux-kernel-cloud-hypervisor@sha256:20a3b24d56a00838a4c4522c97ad127fb74ebd3f9ae12444cbc78b11f73f8272"
 )
 
 var (
