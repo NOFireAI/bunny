@@ -27,12 +27,25 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// urunit and the guest kernel are the two artifacts every Containerfile build
+// injects, so both are pinned by digest: an upstream `latest` could change the
+// guest kernel under a build without anyone noticing. Neither comes from
+// harbor.nbfc.io, whose outage (it served a certificate for the wrong name on
+// 2026-08-26) failed every build.
+//
+// urunit is NOFire AI's own clone, published to ghcr.io/nofireai/urunit. The
+// kernels are the generic Linux 6.18.57 kernel (amd64 and arm64) built
+// reproducibly by github.com/urunc-dev/guest-images, the same ones its own
+// examples use: the uncompressed build (tag generic-6.18.57) for Cloud
+// Hypervisor and Firecracker, the compressed one (tag
+// generic-compressed-6.18.57) for QEMU. To move to a newer build, bump the
+// digests here.
 const (
-	defaultUrunitImage            string = "ghcr.io/nofireai/urunit:latest"
+	defaultUrunitImage            string = "ghcr.io/nofireai/urunit@sha256:239ab9c911a492845a7a6f4be9fe541d62c5ce7738b4230339269ef0caad2230"
 	defaultUrunitPath             string = "/urunit"
-	defaultQemuKernelImage        string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-qemu:latest"
-	defaultFirecrackerKernelImage string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-firecracker:latest"
-	defaultCLHKernelImage         string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-cloud-hypervisor:latest"
+	defaultQemuKernelImage        string = "ghcr.io/urunc-dev/guest-images/linux-kernel@sha256:f3ebe9b620fa1ca99cd9e5e41e3bb40fa8bcb525995693c477d80ff170fa1d42"
+	defaultFirecrackerKernelImage string = "ghcr.io/urunc-dev/guest-images/linux-kernel@sha256:c0619bd0c919c9a33ae600432148c2ea5f8a5492036aa4efd9354b06e4d66e01"
+	defaultCLHKernelImage         string = "ghcr.io/urunc-dev/guest-images/linux-kernel@sha256:c0619bd0c919c9a33ae600432148c2ea5f8a5492036aa4efd9354b06e4d66e01"
 )
 
 var (
