@@ -31,12 +31,16 @@ import (
 // Containerfile build injects, so they come from our own registry, pinned by
 // digest: an upstream `latest` could change the guest kernel under a build
 // without anyone noticing, and a harbor.nbfc.io outage (it served a certificate
-// for the wrong name on 2026-08-26) would fail every build. The copies are
-// made by .github/workflows/mirror-nofire.yml with digests preserved, so each
-// digest here is the upstream one. To move to a newer upstream build, bump the
-// digest there and here together.
+// for the wrong name on 2026-08-26) would fail every build.
+//
+// urunit is NOFire AI's own clone, published to ghcr.io/nofireai/urunit by its
+// repository; to move to a newer build, bump the digest here. The Cloud
+// Hypervisor kernel is an upstream image mirrored by
+// .github/workflows/mirror-nofire.yml with digests preserved, so its digest
+// here is the upstream one; to move to a newer upstream build, bump the digest
+// there and here together.
 const (
-	defaultUrunitImage            string = "ghcr.io/nofireai/urunit@sha256:ae7553fcf81489da20c34e8ec57f64f549a6db8aa9c48636e343c271d6a7b2d2"
+	defaultUrunitImage            string = "ghcr.io/nofireai/urunit@sha256:239ab9c911a492845a7a6f4be9fe541d62c5ce7738b4230339269ef0caad2230"
 	defaultUrunitPath             string = "/urunit"
 	defaultQemuKernelImage        string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-qemu:latest"
 	defaultFirecrackerKernelImage string = "harbor.nbfc.io/nubificus/bunny/linux-kernel-firecracker:latest"
